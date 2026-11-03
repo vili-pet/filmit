@@ -5,6 +5,7 @@ import { Icon } from "../components/Icon";
 import { VideoThumb } from "../components/VideoThumb";
 import { useObjectUrl } from "../hooks/useObjectUrl";
 import { montagePlan, selectClipsInRange, summarizeMontage, weekNumber } from "../lib/montage";
+import { shareVideos, videoExtension } from "../lib/share";
 import {
   addDays,
   endOfMonth,
@@ -107,7 +108,7 @@ export function MontagesView() {
     <section className="view story-view">
       <header className="view-header">
         <h1>Your Story</h1>
-        <p className="lede">Create beautiful video montages from your captured Snappits</p>
+        <p className="lede">Create beautiful video montages from your captured Films</p>
       </header>
 
       <div className="underline-tabs" role="tablist" aria-label="Montage period">
@@ -190,7 +191,7 @@ export function MontagesView() {
               <span className="period-ring is-muted">
                 <Icon name="video-off" />
               </span>
-              <p className="period-title">Not enough Snappits</p>
+              <p className="period-title">Not enough Films</p>
               <p className="period-hint">
                 Only {periodClips.length} of {MIN_CLIPS} required
               </p>
@@ -216,7 +217,7 @@ export function MontagesView() {
       {montages.length === 0 ? (
         <EmptyState
           title="No saved montages"
-          body={`Collect at least ${MIN_CLIPS} Snappits in a period and create your first montage.`}
+          body={`Collect at least ${MIN_CLIPS} Films in a period and create your first montage.`}
         />
       ) : (
         <ul className="montage-list">
@@ -246,6 +247,7 @@ export function MontagesView() {
 
 function MontageResult({ montageId }: { montageId: string }) {
   const { montages, clips } = useApp();
+  const [sharing, setSharing] = useState(false);
   const montage = montages.find((item) => item.id === montageId);
   const url = useObjectUrl(montage?.blob);
   const selected = clips
@@ -253,8 +255,31 @@ function MontageResult({ montageId }: { montageId: string }) {
     .sort((a, b) => a.createdAt - b.createdAt);
 
   if (!montage) return null;
-  if (montage.status === "encoded" && url) {
-    return <video src={url} controls playsInline className="montage-video" />;
+  if (montage.status === "encoded" && url && montage.blob && montage.mimeType) {
+    const share = async () => {
+      setSharing(true);
+      try {
+        const safeTitle = montage.title.replace(/\s+/g, "-");
+        await shareVideos([
+          {
+            blob: montage.blob as Blob,
+            name: `filmit-${safeTitle}.${videoExtension(montage.mimeType as string)}`,
+          },
+        ]);
+      } catch (cause) {
+        alert(cause instanceof Error ? cause.message : "Jakaminen epäonnistui.");
+      } finally {
+        setSharing(false);
+      }
+    };
+    return (
+      <div className="montage-result">
+        <video src={url} controls playsInline className="montage-video" />
+        <button type="button" className="text-btn" disabled={sharing} onClick={() => void share()}>
+          {sharing ? "Preparing…" : "Save / share film"}
+        </button>
+      </div>
+    );
   }
   return <SequencePlayer clips={selected} title="Sequential preview" />;
 }

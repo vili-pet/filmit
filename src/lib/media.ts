@@ -142,7 +142,7 @@ export async function generatePlaceholderBlob(hue: number, label: string): Promi
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "rgba(255,253,248,0.92)";
     ctx.font = "600 28px Figtree, sans-serif";
-    ctx.fillText("Snappit", 28, 80);
+    ctx.fillText("Filmit", 28, 80);
     ctx.font = "500 22px Fraunces, serif";
     ctx.fillText(label, 28, 130);
     if (now - started < durationMs && recorder.state === "recording") {

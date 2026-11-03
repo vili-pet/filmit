@@ -1,4 +1,5 @@
 import { addDays, toDateKey } from "./dates";
+import { DEMO_PLACES } from "./geofence";
 import { generatePlaceholderBlob } from "./media";
 import { createId } from "./id";
 import type { Clip } from "./types";
@@ -19,6 +20,7 @@ export function buildDemoClipMetadata(now = new Date()): Omit<Clip, "blob" | "mi
   return DEMO_DAYS.map((item, index) => {
     const created = addDays(now, item.offset);
     created.setHours(8 + (index % 5), 12 + index, 0, 0);
+    const place = DEMO_PLACES.find((candidate) => candidate.id === item.placeId);
     return {
       id: `demo_${item.offset}_${index}`,
       createdAt: created.getTime(),
@@ -26,6 +28,7 @@ export function buildDemoClipMetadata(now = new Date()): Omit<Clip, "blob" | "mi
       durationMs: 1600,
       placeId: item.placeId,
       placeLabel: item.placeLabel,
+      coord: place ? { lat: place.lat, lng: place.lng } : undefined,
       source: "demo" as const,
       isDemo: true,
       placeholderHue: item.hue,

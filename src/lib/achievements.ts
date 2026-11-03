@@ -10,8 +10,8 @@ export type AchievementDef = {
 export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "first-snappit",
-    title: "1st Snappit",
-    description: "Save your first 10-second moment.",
+    title: "1st Film",
+    description: "Save your first 7-second moment.",
   },
   {
     id: "streak-starter",

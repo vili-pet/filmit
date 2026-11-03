@@ -1,19 +1,14 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePermissions } from "../hooks/usePermissions";
 import { DEMO_OUTSIDE, DEMO_PLACES } from "../lib/geofence";
 import { createId } from "../lib/id";
 import { ACHIEVEMENTS } from "../lib/achievements";
+import { openLocationSettings } from "../lib/tracking";
+import { isNativePlatform } from "../lib/native";
 import { useApp, useProgress } from "../hooks/useApp";
-import { BUILD_NUMBER, openLatestApk, type UpdateCheck } from "../lib/updater";
-import type { Place } from "../lib/types";
+import { TRACKING_INTERVAL_OPTIONS, type Place } from "../lib/types";
 
-export function SettingsView({
-  update,
-  onCheck,
-}: {
-  update?: UpdateCheck | null;
-  onCheck?: () => void;
-}) {
+export function SettingsView() {
   const {
     settings,
     updateSettings,
@@ -28,18 +23,8 @@ export function SettingsView({
   } = useApp();
   const { streak, progress } = useProgress();
   const { camera, location, support } = usePermissions();
-  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [draftName, setDraftName] = useState("");
   const [draftRadius, setDraftRadius] = useState(120);
-
-  useEffect(() => {
-    const onPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallEvent(event as BeforeInstallPromptEvent);
-    };
-    window.addEventListener("beforeinstallprompt", onPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
-  }, []);
 
   const saveCurrentAsPlace = async () => {
     const coord = settings.mockedLocation;
@@ -118,10 +103,10 @@ export function SettingsView({
       </section>
 
       <section className="card">
-        <h2>Places and geofence</h2>
+        <h2>Location &amp; tracking</h2>
         <p>
-          Tracking only works while the app is open. Browsers do not offer reliable background
-          location, even in an installed PWA.
+          Filmit follows your places in the background and reminds you on arrival. GPS sleeps
+          completely outside the active hours and while paused.
         </p>
         <label className="toggle">
           <input
@@ -129,8 +114,65 @@ export function SettingsView({
             checked={settings.geofenceEnabled}
             onChange={(event) => void updateSettings({ geofenceEnabled: event.target.checked })}
           />
-          <span>Follow places while the app is open</span>
+          <span>Place tracking (background service)</span>
         </label>
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={settings.trackingPaused}
+            onChange={(event) => void updateSettings({ trackingPaused: event.target.checked })}
+          />
+          <span>Paused — no location checks now</span>
+        </label>
+        <fieldset className="segment" role="group" aria-label="Tracking interval">
+          <legend className="sr-only">Tracking interval</legend>
+          {TRACKING_INTERVAL_OPTIONS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={settings.trackingIntervalMin === option ? "is-active" : undefined}
+              onClick={() => void updateSettings({ trackingIntervalMin: option })}
+            >
+              {option} min
+            </button>
+          ))}
+        </fieldset>
+        <p className="muted">Arrivals are checked at most this often.</p>
+        <div className="row wrap">
+          <label className="field">
+            <span>Active from</span>
+            <input
+              type="time"
+              value={settings.activeStart}
+              onChange={(event) => void updateSettings({ activeStart: event.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>Active until</span>
+            <input
+              type="time"
+              value={settings.activeEnd}
+              onChange={(event) => void updateSettings({ activeEnd: event.target.value })}
+            />
+          </label>
+        </div>
+        <p className="muted">
+          Outside this window tracking is switched off entirely. A window may wrap midnight, e.g.
+          22:00–06:00 covers the evening and the early morning.
+        </p>
+        {isNativePlatform() ? (
+          <div className="row">
+            <button type="button" className="btn btn-ghost" onClick={() => void openLocationSettings()}>
+              Open Android location settings
+            </button>
+          </div>
+        ) : null}
+        {isNativePlatform() ? (
+          <p className="muted">
+            Background reminders need the "Allow all the time" location permission — grant it from
+            the system settings if arrivals go unnoticed.
+          </p>
+        ) : null}
         <label className="toggle">
           <input
             type="checkbox"
@@ -240,52 +282,12 @@ export function SettingsView({
           </li>
         </ul>
         <p>
-          Snappit never uploads clips, location or identifiers to a server. Places are stored
-          locally; the UI shows names, never a map.
+          Filmit never uploads clips, location or identifiers to a server. Videos live in the app's
+          private storage — they never appear in the phone gallery and leave the device only when
+          you share or export them. The map is drawn locally from your own data.
         </p>
       </section>
 
-      <section className="card">
-        <h2>Updates</h2>
-        <p>
-          This build: {BUILD_NUMBER > 0 ? `1.0.${BUILD_NUMBER}` : "local dev build"}. New builds
-          are published automatically on every push to GitHub.
-        </p>
-        <p className="muted">
-          {update?.status === "available" || update?.status === "dev-build"
-            ? `Version 1.0.${update.build} is available.`
-            : update?.status === "up-to-date"
-              ? "You are on the latest build."
-              : update?.status === "offline"
-                ? "Could not reach GitHub just now."
-                : "Checking…"}
-        </p>
-        <div className="row">
-          <button type="button" className="btn btn-ghost" onClick={onCheck}>
-            Check now
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => openLatestApk()}
-          >
-            Download latest APK
-          </button>
-        </div>
-      </section>
-
-      <section className="card">
-        <h2>Install</h2>
-        <p>Installable PWA. iOS: Share → Add to Home Screen.</p>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={!installEvent}
-          onClick={() => void installEvent?.prompt()}
-        >
-          {installEvent ? "Install app" : "Use the browser menu to install"}
-        </button>
-      </section>
     </section>
   );
 }
@@ -295,8 +297,4 @@ function labelPermission(state: string, supported: boolean): string {
   if (state === "granted") return "Allowed";
   if (state === "denied") return "Denied";
   return "Not asked";
-}
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
 }

@@ -9,6 +9,8 @@ import {
   groupClipsByDate,
   groupClipsByMonth,
 } from "../lib/dates";
+import { shareVideos, videoFileName } from "../lib/share";
+import type { Clip } from "../lib/types";
 import type { Route } from "../lib/route";
 import { useApp } from "../hooks/useApp";
 
@@ -21,21 +23,42 @@ export function MemoriesView({
 }) {
   const { clips, removeClip } = useApp();
   const [openDay, setOpenDay] = useState<string | null>(route.dateKey ?? null);
+  const [sharingDay, setSharingDay] = useState<string | null>(null);
 
   const months = useMemo(() => groupClipsByMonth(clips), [clips]);
   const groups = useMemo(() => groupClipsByDate(clips), [clips]);
+
+  const shareDay = async (dayClips: Clip[]) => {
+    const dateKey = dayClips[0]?.dateKey;
+    if (!dateKey || sharingDay) return;
+    setSharingDay(dateKey);
+    try {
+      await shareVideos(
+        dayClips
+          .filter((clip) => clip.blob.size > 0)
+          .map((clip) => ({
+            blob: clip.blob,
+            name: videoFileName(clip.dateKey, clip.id, clip.mimeType),
+          })),
+      );
+    } catch (cause) {
+      alert(cause instanceof Error ? cause.message : "Jakaminen epäonnistui.");
+    } finally {
+      setSharingDay(null);
+    }
+  };
 
   if (clips.length === 0) {
     return (
       <section className="view timeline-view">
         <header className="view-header">
           <h1>Your Timeline</h1>
-          <p className="lede">Your daily Snappits, beautifully organized</p>
+          <p className="lede">Your daily Films, beautifully organized</p>
         </header>
         <EmptyState
-          title="No Snappits yet"
-          body="Capture your first 10-second moment and it will show up here."
-          action={{ label: "Capture a Snappit", onClick: () => onNavigate({ view: "capture" }) }}
+          title="No Films yet"
+          body="Capture your first 7-second moment and it will show up here."
+          action={{ label: "Capture a Film", onClick: () => onNavigate({ view: "capture" }) }}
         />
       </section>
     );
@@ -45,7 +68,7 @@ export function MemoriesView({
     <section className="view timeline-view">
       <header className="view-header">
         <h1>Your Timeline</h1>
-        <p className="lede">Your daily Snappits, beautifully organized</p>
+        <p className="lede">Your daily Films, beautifully organized</p>
       </header>
 
       {months.map((month) => (
@@ -79,17 +102,49 @@ export function MemoriesView({
             })}
           </div>
           {openDay && month.clips.some((clip) => clip.dateKey === openDay) ? (
-            <div className="day-detail">
-              <h3>{formatCardDateEN(openDay)}</h3>
-              <div className="clip-grid">
-                {(groups.get(openDay) ?? []).map((clip) => (
-                  <ClipCard key={clip.id} clip={clip} onDelete={(id) => void removeClip(id)} />
-                ))}
-              </div>
-            </div>
+            <DayDetail
+              dateKey={openDay}
+              dayClips={groups.get(openDay) ?? []}
+              sharing={sharingDay === openDay}
+              onShare={() => void shareDay(groups.get(openDay) ?? [])}
+              onDelete={(id) => void removeClip(id)}
+            />
           ) : null}
         </section>
       ))}
     </section>
+  );
+}
+
+function DayDetail({
+  dateKey,
+  dayClips,
+  sharing,
+  onShare,
+  onDelete,
+}: {
+  dateKey: string;
+  dayClips: Clip[];
+  sharing: boolean;
+  onShare: () => void;
+  onDelete: (id: string) => void;
+}) {
+  const shareable = dayClips.filter((clip) => clip.blob.size > 0).length;
+  return (
+    <div className="day-detail">
+      <div className="day-detail-head">
+        <h3>{formatCardDateEN(dateKey)}</h3>
+        {shareable > 0 ? (
+          <button type="button" className="text-btn" disabled={sharing} onClick={onShare}>
+            {sharing ? "Preparing…" : `Share day's films (${shareable})`}
+          </button>
+        ) : null}
+      </div>
+      <div className="clip-grid">
+        {dayClips.map((clip) => (
+          <ClipCard key={clip.id} clip={clip} onDelete={onDelete} />
+        ))}
+      </div>
+    </div>
   );
 }

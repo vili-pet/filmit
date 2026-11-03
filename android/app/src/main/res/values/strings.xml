@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Snappit</string>
-    <string name="title_activity_main">Snappit</string>
+    <string name="app_name">Filmit</string>
+    <string name="title_activity_main">Filmit</string>
     <string name="package_name">pet.vili.snappit</string>
     <string name="custom_url_scheme">pet.vili.snappit</string>
 </resources>

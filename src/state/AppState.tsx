@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Capacitor } from "@capacitor/core";
+import { App } from "@capacitor/app";
 import { evaluateAchievements, newlyUnlocked } from "../lib/achievements";
 import { createDemoClips } from "../lib/demo-data";
-import { ensureLocationPermission } from "../lib/native";
+import { ensureNotificationSetup, notifyArrival } from "../lib/notify";
+import { shouldProcessPosition } from "../lib/schedule";
+import { createTrackingController, trackingDecision } from "../lib/tracking";
 import {
   deleteClip as dbDeleteClip,
   deleteDemoClips,
@@ -46,6 +50,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const previousPlaceId = useRef<string | null>(null);
   const placesRef = useRef<Place[]>([]);
   const settingsRef = useRef(settings);
+  const lastFixRef = useRef<{ coord: Coord; at: number } | null>(null);
+  const lastProcessedAtRef = useRef<number | null>(null);
+  const lastErrorToastRef = useRef(0);
+  const controllerRef = useRef<ReturnType<typeof createTrackingController> | null>(null);
+  // document.hidden stays false for a backgrounded Capacitor WebView, so the
+  // reliable background signal comes from the native appStateChange event.
+  const appBackgroundRef = useRef(document.hidden);
 
   useEffect(() => {
     placesRef.current = places;
@@ -113,61 +124,114 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const previous =
       placesRef.current.find((place) => place.id === previousPlaceId.current) ?? null;
     const transition = detectTransition(previous, next);
+    // Arrivals are always processed; only stationary re-fixes obey the
+    // tracking interval — the plugin's distance filter already limits them.
+    if (
+      !transition &&
+      !shouldProcessPosition(
+        Date.now(),
+        lastProcessedAtRef.current,
+        settingsRef.current.trackingIntervalMin,
+      )
+    ) {
+      lastFixRef.current = { coord, at: Date.now() };
+      return;
+    }
+    lastProcessedAtRef.current = Date.now();
     previousPlaceId.current = next?.id ?? null;
     setCurrentPlace(next);
-    if (transition) setPrompt(transition);
+    lastFixRef.current = { coord, at: Date.now() };
+    if (transition) {
+      setPrompt(transition);
+      // Backgrounded arrivals surface as system notifications; the in-app
+      // sheet covers the foreground case.
+      if ((appBackgroundRef.current || document.hidden) && transition.type !== "exit") {
+        const place = transition.type === "transfer" ? transition.to : transition.place;
+        void notifyArrival(place);
+      }
+    }
   }, []);
 
   useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return undefined;
+    const handle = App.addListener("appStateChange", (state) => {
+      appBackgroundRef.current = !state.isActive;
+    });
+    return () => {
+      void handle.then((listener) => listener.remove());
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = createTrackingController({
+      onCoord: (coord) => {
+        applyCoord(coord);
+      },
+      onAutoStop: (state) => {
+        if (state === "outside-active-hours") {
+          pushToast("Seurantaikkuna päättyi — paikannus pysäytetty.");
+        }
+      },
+      onError: (message) => {
+        const now = Date.now();
+        if (now - lastErrorToastRef.current < 60_000) return;
+        lastErrorToastRef.current = now;
+        pushToast(message);
+      },
+    });
+    controllerRef.current = controller;
+    return () => {
+      controllerRef.current = null;
+      void controller.stop();
+    };
+  }, [applyCoord, pushToast]);
+
+  useEffect(() => {
+    if (settings.demoLocationMode) {
+      void controllerRef.current?.stop();
+      if (settings.geofenceEnabled && settings.mockedLocation) {
+        applyCoord(settings.mockedLocation);
+      }
+      return;
+    }
     if (!settings.geofenceEnabled) {
+      void controllerRef.current?.stop();
       setCurrentPlace(null);
       previousPlaceId.current = null;
+      lastFixRef.current = null;
       return;
     }
-    if (settings.demoLocationMode) {
-      if (settings.mockedLocation) applyCoord(settings.mockedLocation);
-      return;
-    }
-    if (!navigator.geolocation) return undefined;
-    let cancelled = false;
-    let watchId: number | null = null;
-    void ensureLocationPermission()
-      .then((granted) => {
-        if (cancelled) return;
-        if (!granted) {
-          pushToast("Sijaintilupa puuttuu. Käytä demopaikannusta testaukseen.");
-          return;
-        }
-        watchId = navigator.geolocation.watchPosition(
-          (position) => {
-            applyCoord({ lat: position.coords.latitude, lng: position.coords.longitude });
-          },
-          () => {
-            pushToast("Sijaintia ei saatu. Käytä demopaikannusta testaukseen.");
-          },
-          { enableHighAccuracy: false, maximumAge: 15_000, timeout: 12_000 },
-        );
-      })
-      .catch(() => {
-        if (cancelled) return;
-        pushToast("Sijaintilupa puuttuu. Käytä demopaikannusta testaukseen.");
-      });
-    return () => {
-      cancelled = true;
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    void ensureNotificationSetup();
+    const drive = () => {
+      const controller = controllerRef.current;
+      if (!controller) return;
+      if (trackingDecision(settings, new Date()) === "active") {
+        void controller.apply(settings);
+      } else {
+        void controller.stop();
+      }
     };
-  }, [
-    applyCoord,
-    pushToast,
-    settings.demoLocationMode,
-    settings.geofenceEnabled,
-    settings.mockedLocation,
-  ]);
+    drive();
+    // The tick only flips the window edges while the process is alive;
+    // fixes re-check the schedule themselves once timers are frozen.
+    const tick = window.setInterval(drive, 60_000);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") drive();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [applyCoord, settings]);
 
   const saveClip = useCallback(
     async (input: SaveClipInput) => {
       const now = new Date();
       const place = settingsRef.current.attachPlaceLabels ? currentPlace : null;
+      const freshFix = lastFixRef.current;
+      const coord =
+        freshFix && now.getTime() - freshFix.at <= 30 * 60_000 ? freshFix.coord : undefined;
       const clip: Clip = {
         id: createId("clip"),
         createdAt: now.getTime(),
@@ -179,6 +243,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isDemo: Boolean(input.isDemo),
         placeId: place?.id,
         placeLabel: place?.name,
+        coord,
       };
       await putClip(clip);
       const next = [clip, ...clips];

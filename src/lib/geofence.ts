@@ -60,7 +60,7 @@ export function transitionCopy(transition: GeofenceTransition): {
   if (transition.type === "enter") {
     return {
       title: `Arrived: ${transition.place.name}`,
-      body: "Place changed. Capture a 10-second moment?",
+      body: "Place changed. Capture a 7-second moment?",
     };
   }
   if (transition.type === "exit") {

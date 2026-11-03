@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useObjectUrl } from "../hooks/useObjectUrl";
 import { formatTime } from "../lib/dates";
+import { shareVideos, videoFileName } from "../lib/share";
 import type { Clip } from "../lib/types";
 
 export function ClipCard({
@@ -13,6 +14,24 @@ export function ClipCard({
   const url = useObjectUrl(clip.blob);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [sharing, setSharing] = useState(false);
+
+  const handleShare = async () => {
+    if (sharing || clip.blob.size === 0) return;
+    setSharing(true);
+    try {
+      await shareVideos([
+        {
+          blob: clip.blob,
+          name: videoFileName(clip.dateKey, clip.id, clip.mimeType),
+        },
+      ]);
+    } catch (cause) {
+      alert(cause instanceof Error ? cause.message : "Jakaminen epäonnistui.");
+    } finally {
+      setSharing(false);
+    }
+  };
 
   return (
     <article className={clip.isDemo ? "clip-card is-demo" : "clip-card"}>
@@ -59,6 +78,11 @@ export function ClipCard({
           {clip.source === "camera" ? "Camera" : clip.source === "import" ? "Imported" : "Demo"}
         </p>
       </div>
+      {clip.blob.size > 0 ? (
+        <button type="button" className="text-btn" disabled={sharing} onClick={() => void handleShare()}>
+          {sharing ? "Preparing…" : "Save / share"}
+        </button>
+      ) : null}
       {onDelete ? (
         <button type="button" className="text-btn" onClick={() => onDelete(clip.id)}>
           Delete

@@ -83,7 +83,7 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
       </div>
 
       <div className="today-card">
-        <h2>Today's Snappit</h2>
+        <h2>Today's Film</h2>
         <p className="today-date">{formatTodayLongEN()}</p>
         <button
           type="button"
@@ -91,7 +91,7 @@ export function HomeView({ onNavigate }: { onNavigate: (route: Route) => void })
           onClick={() => onNavigate({ view: "capture" })}
         >
           <Icon name="video" />
-          <span>Capture Your Snappit</span>
+          <span>Capture Your Film</span>
         </button>
       </div>
 

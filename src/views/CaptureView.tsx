@@ -127,8 +127,8 @@ export function CaptureView({ onNavigate }: { onNavigate: (route: Route) => void
   return (
     <section className="view capture-view">
       <header className="view-header">
-        <p className="kicker">Today's Snappit</p>
-        <h1>Capture Your Snappit</h1>
+        <p className="kicker">Today's Film</p>
+        <h1>Capture Your Film</h1>
         <div className="stat-row">
           <span className="chip">{streak.current} day streak</span>
           <span className="chip">Level {progress.level}</span>
@@ -143,7 +143,7 @@ export function CaptureView({ onNavigate }: { onNavigate: (route: Route) => void
         ) : null}
         {phase === "idle" || phase === "error" ? (
           <div className="viewfinder-idle">
-            <p className="viewfinder-mark">10s</p>
+            <p className="viewfinder-mark">7s</p>
             <p>One small moment from your day. No ads, no account.</p>
           </div>
         ) : null}
@@ -222,9 +222,8 @@ export function CaptureView({ onNavigate }: { onNavigate: (route: Route) => void
 
       <aside className="note">
         <p>
-          Background recording is not reliable in a PWA. Keep Snappit open while recording.
-          Permissions: camera and optionally microphone. All clips stay on this device
-          (IndexedDB).
+          Keep the app open while recording. Permissions: camera and optionally microphone. All
+          clips stay in the app's private storage — they never appear in the phone gallery.
         </p>
         {settings.demoDataEnabled ? <p>Demo data is on — your own recordings are marked separately.</p> : null}
         {!inspectCameraSupport().mediaRecorder ? (

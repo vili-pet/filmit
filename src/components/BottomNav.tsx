@@ -3,6 +3,7 @@ import type { Route } from "../lib/route";
 
 const ITEMS: { route: Route; label: string; icon: IconName }[] = [
   { route: { view: "home" }, label: "Home", icon: "home" },
+  { route: { view: "map" }, label: "Map", icon: "map" },
   { route: { view: "memories", mode: "list" }, label: "Timeline", icon: "timeline" },
   { route: { view: "montages" }, label: "Montages", icon: "montages" },
 ];

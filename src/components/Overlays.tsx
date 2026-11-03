@@ -16,7 +16,7 @@ export function Overlays({ onNavigate }: { onNavigate: (route: Route) => void })
             <h2 id="prompt-title">{transitionCopy(prompt).title}</h2>
             <p>{transitionCopy(prompt).body}</p>
             <p className="muted">
-              Heräte toimii vain kun Snappit on avoinna. Taustaseuranta ei ole luotettavaa
+              Heräte toimii vain kun Filmit on avoinna. Taustaseuranta ei ole luotettavaa
               selaimessa.
             </p>
             <div className="row">

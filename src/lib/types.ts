@@ -9,6 +9,8 @@ export type Clip = {
   mimeType: string;
   placeId?: string;
   placeLabel?: string;
+  /** Fix captured at recording time; used by the map and life timeline. */
+  coord?: Coord;
   source: ClipSource;
   isDemo: boolean;
   /** Used when a real video blob could not be encoded (honest preview). */
@@ -36,7 +38,15 @@ export type ThemePreference = "system" | "light" | "dark";
 export type Settings = {
   theme: ThemePreference;
   demoDataEnabled: boolean;
+  /** Master switch for place tracking (background service on native). */
   geofenceEnabled: boolean;
+  /** Manual pause — "day/night" switch. Overrides geofenceEnabled while set. */
+  trackingPaused: boolean;
+  /** Minutes between processed position fixes. */
+  trackingIntervalMin: number;
+  /** Active window "HH:MM" — GPS is fully off outside it. */
+  activeStart: string;
+  activeEnd: string;
   demoLocationMode: boolean;
   showExactLocation: boolean;
   attachPlaceLabels: boolean;
@@ -82,10 +92,16 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   demoDataEnabled: false,
   geofenceEnabled: false,
+  trackingPaused: false,
+  trackingIntervalMin: 30,
+  activeStart: "08:00",
+  activeEnd: "22:00",
   demoLocationMode: false,
   showExactLocation: false,
   attachPlaceLabels: true,
   mockedLocation: null,
 };
 
-export const CLIP_DURATION_MS = 10_000;
+export const TRACKING_INTERVAL_OPTIONS = [15, 30, 60, 90] as const;
+
+export const CLIP_DURATION_MS = 7_000;
