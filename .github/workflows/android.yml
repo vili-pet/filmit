@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    concurrency:
+      group: android-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'publish-main' || github.run_id }}
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -87,7 +90,11 @@ jobs:
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/filmit.apk"
-          if gh release view latest > /dev/null 2>&1; then
+          if title=$(gh release view latest --json name --jq '.name'); then
+            if [[ "$title" =~ ^[12]\.0\.([0-9]+)$ ]] && (( 10#${BASH_REMATCH[1]} >= RUN_NUMBER )); then
+              echo "::warning::Skipping publishing: latest ($title) is at least as new as run $RUN_NUMBER."
+              exit 0
+            fi
             gh release upload latest "$RUNNER_TEMP/filmit.apk" --clobber
             gh release edit latest --title "2.0.$RUN_NUMBER" --notes "Automatic signed build from main@$GITHUB_SHA" --latest
           else
