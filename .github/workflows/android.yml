@@ -53,7 +53,8 @@ jobs:
           from pathlib import Path
 
           def escape(value):
-              return ''.join(f'\\u{ord(char):04x}' for char in value)
+              encoded = value.encode('utf-16-be')
+              return ''.join(f'\\u{int.from_bytes(encoded[i:i + 2], "big"):04x}' for i in range(0, len(encoded), 2))
 
           properties = {
               'storeFile': str(Path(os.environ['RUNNER_TEMP']) / 'filmit-release.jks'),
