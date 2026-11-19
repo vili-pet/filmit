@@ -1,0 +1,102 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint and test
+        run: |
+          npm run lint
+          npm test
+      - name: Build web assets and sync Android
+        env:
+          VITE_BUILD_NUMBER: ${{ github.run_number }}
+        run: npm run android:sync
+      - name: Configure signing
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$ANDROID_KEYSTORE_BASE64" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_ALIAS" && -n "$ANDROID_KEY_PASSWORD" ]]; then
+            umask 077
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/filmit-release.jks"
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          def escape(value):
+              return ''.join(f'\\u{ord(char):04x}' for char in value)
+
+          properties = {
+              'storeFile': str(Path(os.environ['RUNNER_TEMP']) / 'filmit-release.jks'),
+              'storePassword': os.environ['ANDROID_KEYSTORE_PASSWORD'],
+              'keyAlias': os.environ['ANDROID_KEY_ALIAS'],
+              'keyPassword': os.environ['ANDROID_KEY_PASSWORD'],
+          }
+          Path('android/keystore.properties').write_text(
+              ''.join(f'{key}={escape(value)}\n' for key, value in properties.items())
+          )
+          PY
+            echo 'signed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'signed=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build signed release APK
+        if: steps.signing.outputs.signed == 'true'
+        run: node scripts/gradlew.mjs assembleRelease
+      - name: Build debug APK
+        if: steps.signing.outputs.signed != 'true'
+        run: node scripts/gradlew.mjs assembleDebug
+      - name: Warn about skipped publishing
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.signing.outputs.signed != 'true'
+        run: echo '::warning::Android signing secrets are missing; built a debug APK and skipped publishing. Set ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: filmit-apk
+          path: android/app/build/outputs/apk/${{ steps.signing.outputs.signed == 'true' && 'release/app-release.apk' || 'debug/app-debug.apk' }}
+          if-no-files-found: error
+      - name: Publish latest signed APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.signing.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/filmit.apk"
+          if gh release view latest > /dev/null 2>&1; then
+            gh release upload latest "$RUNNER_TEMP/filmit.apk" --clobber
+            gh release edit latest --title "2.0.$RUN_NUMBER" --notes "Automatic signed build from main@$GITHUB_SHA" --latest
+          else
+            gh release create latest "$RUNNER_TEMP/filmit.apk" --target "$GITHUB_SHA" \
+              --title "2.0.$RUN_NUMBER" --notes "Automatic signed build from main@$GITHUB_SHA" --latest
+          fi
+          if gh release view latest --json assets --jq '.assets[].name' | grep -Fxq 'snappit-daily.apk'; then
+            gh release delete-asset latest snappit-daily.apk --yes
+          fi
+      - name: Remove signing files
+        if: always()
+        run: rm -f android/keystore.properties "$RUNNER_TEMP/filmit-release.jks"

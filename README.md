@@ -4,11 +4,11 @@ Maantieteellinen 7 sekunnin videopäiväkirja Androidille. Kun saavut tuttuun pa
 
 Mainokseton, kevyt ja täysin paikallinen. Tekijä: **Vili-Petteri** ([vili-pet](https://github.com/vili-pet)).
 
-> Repo on nimeltään `snappit-daily` historiallisista syistä — sovellus julkaistiin alun perin Snappit-nimisenä selain-PWA:na ja vaihtui Filmitiksi, kun se paketoitiin aidoksi Android-sovellukseksi (Capacitor).
+> Repo oli aiemmin `snappit-daily` — sovellus julkaistiin alun perin Snappit-nimisenä selain-PWA:na ja vaihtui Filmitiksi, kun se paketoitiin aidoksi Android-sovellukseksi (Capacitor).
 
 ## Asennus
 
-Lataa uusin allekirjoitettu APK [GitHub Releases](https://github.com/vili-pet/snappit-daily/releases)-sivulta ja avaa se puhelimessa (salli tuntemattomista lähteistä asennus).
+Lataa uusin allekirjoitettu APK [GitHub Releases](https://github.com/vili-pet/filmit/releases)-sivulta ja avaa se puhelimessa (salli tuntemattomista lähteistä asennus).
 
 Ensikäynnistyksessä:
 
@@ -37,7 +37,7 @@ Ensikäynnistyksessä:
 
 ## Android-build
 
-Vaatimukset: Node.js 22+, JDK 21, Android SDK (platform 35 + build-tools). Aseta `ANDROID_HOME` tai `android/local.properties` (`sdk.dir=...`).
+Vaatimukset: Node.js 22+, JDK 21, Android SDK (platform 36 + build-tools). Aseta `ANDROID_HOME` tai `android/local.properties` (`sdk.dir=...`).
 
 ```bash
 npm install
@@ -74,7 +74,24 @@ Sovellustunnus on `pet.vili.snappit`, näkyvä nimi **Filmit**, näkymä lukittu
 
 3. Aja `./gradlew assembleRelease`. Lopputulos: `android/app/build/outputs/apk/release/app-release.apk`.
 
-**Sama avain joka buildiin** — eri avaimella signattu APK ei asennu vanhan päälle (ja poisto tyhjentää päiväkirjan). Julkaisutapa: GitHub Release (`gh release create vA.B.C filmit.apk`) — uusin release on jakelukanava, eikä sovellus tee itse päivitystarkistuksia.
+**Sama avain joka buildiin** — eri avaimella signattu APK ei asennu vanhan päälle (ja poisto tyhjentää päiväkirjan). v2.0.0:n päivityksiin käytä Vili-Petterin alkuperäistä julkaisuavainta, älä luo uutta avainta.
+
+### Android CI ja jatkuva APK-julkaisu
+
+`.github/workflows/android.yml` ajaa lintin, testit ja Android-buildin main-pusheissa, pull requesteissa ja käsin käynnistettynä. Jokainen onnistunut build tallentaa APK:n `filmit-apk`-artefaktina.
+
+Lisää repon **Settings → Secrets and variables → Actions → New repository secret** -sivulla neljä salaisuutta:
+
+- `ANDROID_KEYSTORE_BASE64`: alkuperäisen julkaisu-keystoren base64-sisältö; luo Linuxissa komennolla `base64 -w0 my.jks` ja kopioi tulos salaisuuden arvoksi (älä commitoi sitä).
+- `ANDROID_KEYSTORE_PASSWORD`: keystoren salasana.
+- `ANDROID_KEY_ALIAS`: julkaisuavaimen alias.
+- `ANDROID_KEY_PASSWORD`: julkaisuavaimen salasana.
+
+CI purkaa keystoren väliaikaistiedostoon ja kirjoittaa gitignoroidun `android/keystore.properties`-tiedoston. `storeFile` on absoluuttinen polku, koska suhteellinen polku ratkeaa `android/app/`-hakemistosta. Tiedostot poistetaan buildin jälkeen.
+
+Kun kaikki neljä salaisuutta ovat saatavilla, CI rakentaa allekirjoitetun release-APK:n. Main-push päivittää vain [latest-julkaisun](https://github.com/vili-pet/filmit/releases/tag/latest): nimi `2.0.<run_number>`, tiedosto `filmit.apk`; vanha `snappit-daily.apk` poistetaan. v2.0.0-julkaisu säilyy koskemattomana. VersionCode on alkuperäisen Android-workflow'n jatkuva ajonumero, versionName `2.0.<run_number>`.
+
+Jos yksikin salaisuus puuttuu (esim. fork-PR), CI rakentaa debug-APK:n eikä julkaise sitä; main-push näyttää tästä varoituksen. Debug-avaimella allekirjoitettu vanha rolling-APK ei päivity julkaisuavaimella allekirjoitettuun versioon suoraan. Sovellus ei tarkista päivityksiä itse.
 
 ## Testit
 
