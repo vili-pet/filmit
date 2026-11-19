@@ -11,7 +11,7 @@ android {
         // so every pushed APK installs as an update on the phone.
         def runNumber = System.getenv("GITHUB_RUN_NUMBER")
         versionCode runNumber != null ? runNumber.toInteger() : 1
-        versionName runNumber != null ? "1.0.${runNumber}" : "1.0-local"
+        versionName runNumber != null ? "2.0.${runNumber}" : "2.0-local"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
